@@ -1,0 +1,8 @@
+name: WRLC Alert Signup
+type: module
+description: Allow users to subscribe to the WRLC Alert Google Group
+package: Custom
+core: 8.x
+core_version_requirement: ^8 || ^9
+dependencies:
+  - google_api_client
