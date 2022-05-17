@@ -45,7 +45,7 @@ class SignupBlock extends BlockBase {
 
     }
     catch (Exception $e) {
-      ksm($e);
+      // ksm($e);
       exit();
     }
 
