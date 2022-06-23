@@ -26,19 +26,18 @@ class SubscribeForm extends FormBase {
     $account = \Drupal\user\Entity\User::load(\Drupal::currentUser()->id());
     $email = $account->getEmail();
 
-    $form['signup'] = [
-      '#type' => 'checkbox',
-      '#title' => $this->t('Subscribe to WRLC Alerts'),
-      '#required' => TRUE,
-      '#description' => 'Subscribe to receive alerts in your inbox at ' . $email . '.',
-    ];
-
     $form['actions'] = [
       '#type' => 'actions',
     ];
+
+    $form['actions']['#prefix'] = '<div class="prefix">';
+    $form['actions']['#prefix'] .= '<p><em>' . $email .'</em> is not subscribed.</p><p></p>';
+    $form['actions']['#prefix'] .= '</div>';
+
     $form['actions']['submit'] = [
       '#type' => 'submit',
       '#value' => $this->t('Subscribe'),
+      '#button_type' => 'success',
     ];
 
     return $form;
@@ -87,7 +86,7 @@ class SubscribeForm extends FormBase {
     }
 
     // Provide a confirmation message
-    $this->messenger()->addStatus($this->t('You have been subscribed to WRLC alerts.'));
+    $this->messenger()->addStatus($this->t('<em>' . $email .'</em> is now subscribed to WRLC Alerts.'));
 
   }
 }
