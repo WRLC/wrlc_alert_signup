@@ -26,19 +26,18 @@ class UnsubscribeForm extends FormBase {
     $account = \Drupal\user\Entity\User::load(\Drupal::currentUser()->id());
     $email = $account->getEmail();
 
-    $form['message'] = [
-      '#type' => 'checkbox',
-      '#title' => $this->t('Unsubscribe from WRLC Alerts'),
-      '#required' => TRUE,
-      '#description' => 'You are currently subscribed as ' . $email . '.',
-    ];
-
     $form['actions'] = [
       '#type' => 'actions',
     ];
+
+    $form['actions']['#prefix'] = '<div class="prefix">';
+    $form['actions']['#prefix'] .= '<p><em>' . $email .'</em> is subscribed.</p><p></p>';
+    $form['actions']['#prefix'] .= '</div>';
+
     $form['actions']['submit'] = [
       '#type' => 'submit',
       '#value' => $this->t('Unsubscribe'),
+      '#button_type' => 'danger',
     ];
 
     return $form;
@@ -79,7 +78,7 @@ class UnsubscribeForm extends FormBase {
       exit();
     }
 
-    $this->messenger()->addStatus($this->t('You have been unsubscribed.'));
+    $this->messenger()->addStatus($this->t('<em>'. $email .'</em> is now unsubscribed from WRLC Alerts.'));
   }
 
 }
