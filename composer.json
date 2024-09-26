@@ -1,0 +1,17 @@
+{
+    "name": "wrlc/wrlc_alert_signup",
+    "description": "Allow users to subscribe to the WRLC Alert Google Group",
+    "type": "drupal-custom-module",
+    "authors": [
+        {
+            "name": "tomboone",
+            "email": "tom.boone@wrlc.org"
+        }
+    ],
+    "minimum-stability": "dev",
+    "require": {
+        "drupal/core": "^10.3 || ^11",
+        "composer/installers": "^2.0",
+        "drupal/google_api_client": "^4.2"
+    }
+}

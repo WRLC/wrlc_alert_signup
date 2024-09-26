@@ -1,0 +1,221 @@
+<?php
+
+use Drupal\node\Entity\Node;
+use Drupal\Core\Entity\Query\QueryInterface;
+
+/**
+ * @file
+ * Primary module hooks for WRLC Alert Signup module.
+ *
+ * @DCG
+ * This file is no longer required in Drupal 8.
+ * @see https://www.drupal.org/node/2217931
+ */
+
+/**
+ * Implements hook_cron().
+ */
+function wrlc_alert_signup_cron(): void {
+
+  // Get module config
+  $config = \Drupal::config('wrlc_alert_signup.settings');
+
+  // Module machine name and node type for use in Watchdog
+  $channel = 'wrlc_alert_signup';
+  $type = $config->get('node_type');
+  $client = $config->get('google_api_client');
+
+  // Count of imported items for Watchdog
+  $imported = 0;
+
+  // Get all existing message ids from wrlc_alerts nodes
+  $nids = \Drupal::entityQuery('node')
+    ->accessCheck(FALSE)
+    ->condition('type', 'wrlc_alerts')
+    ->execute();
+  $nodes = \Drupal\node\Entity\Node::loadMultiple($nids);
+  $oldMessages = [];
+  foreach ($nodes as $node) {
+    $oldMessage = $node->get('field_message_id')->getValue();
+    if (array_key_exists(0, $oldMessage)) {
+      $oldMessages[] = $oldMessage[0]['value'];
+    }
+  }
+
+  // Load the Google account
+  // (id should match id of api client in Drupal admin settings)
+  try {
+    $google_api_client = \Drupal::entityTypeManager()
+      ->getStorage('google_api_client')
+      ->load($client);
+  } catch (Exception $e) {
+    wrlc_alert_signup_log_error($e, $channel);
+    exit();
+  }
+
+  // Get the service.
+  $googleService = \Drupal::service('google_api_client.client');
+  // Apply the account to the service
+  $googleService->setGoogleApiClient($google_api_client);
+
+  // Fetch service objects.
+  try {
+    $object = $googleService->getServiceObjects();
+  } catch (Exception $e) {
+    wrlc_alert_signup_log_error($e, $channel);
+    exit();
+  }
+
+  // Get Google Group's email address
+  $group = $object['directory']->groups->get($config->get('gg_id'));
+  $email = $group->email;
+
+
+  // Create query parameter to filter for alert messages
+  $params = [
+    'labelIds' => [
+      'INBOX',
+      'UNREAD'
+    ],
+    'q' => 'list:' . $email,
+  ];
+
+  // Get list of message IDs from Gmail
+  try {
+    $messages = $object['gmail']
+      ->users_messages
+      ->listUsersMessages('me', $params)['messages'];
+  } catch (Exception $e) {
+    wrlc_alert_signup_log_error($e, $channel);
+    exit();
+  }
+
+  // Loop through response to fetch each message by ID
+  foreach($messages as $message) {
+    try {
+      $content = $object['gmail']
+        ->users_messages
+        ->get('me', $message['id']);
+    }
+    catch (Exception $e) {
+      wrlc_alert_signup_log_error($e, $channel);
+      continue;
+    }
+
+    // Filter out previously imported message IDs
+    if (!in_array($content->getId(), $oldMessages)) {
+
+      // Parse new message for import
+      $messageId = $content->getId();  // Get message id
+      $payload = $content->getPayload();  // Get message payload
+      $parts = $payload->getParts();  // Get payload parts
+      $body = '';  // Initialize empty body value
+      $subject = '';  // Initialize empty subject value
+      $created = '';  // Initialize empty date value
+      $sender = 1;  // Initialize superuser as author
+
+      // Loop through headers for subject, datetime, and sender
+      foreach ($payload['headers'] as $header) {
+        // Subject
+        if ($header['name'] == 'Subject') {
+          $subject = $header['value'];
+          // snip off GG id
+          $prefix = '[WRLC-alert] ';
+          if (str_starts_with($subject, $prefix)) {
+            $subject = substr($subject, strlen($prefix));
+          }
+        }
+        // Datetime
+        if ($header['name'] == 'Date') {
+          $created = $header['value'];
+        }
+        // Sender
+        if ($header['name'] == 'X-Original-Sender') {
+          $sender = $header['value'];
+          $ids = \Drupal::entityQuery('user')
+            ->accessCheck(FALSE)
+            ->condition('mail', $sender)
+            ->execute();
+          if (count($ids) == 1) {
+            foreach ($ids as $id) {
+              $sender = $id;
+            }
+          }
+        }
+      }
+
+      // Loop through parts for HTML body
+      foreach ($parts as $part) {
+        if ($part['mimeType'] == 'text/html') {
+          $body = $part['body']['data'];
+          $body = base64_decode(str_replace(array('-', '_'), array('+', '/'), $body));
+          // snip off GG boilerplate
+          $suffix = "The WRLC Alerts group is used to inform";
+          if (str_contains($body, $suffix)) {
+            $body = substr($body, 0, strpos($body, $suffix));
+          }
+        }
+      }
+
+      // Use message to create a node
+      $node = Node::create([
+        'type' => $type,
+        'uid' => $sender,
+        'created' => strtotime($created),
+        'title' => $subject,
+        'body' => [
+          'value' => $body,
+          'format' => 'full_html'
+        ],
+        'field_message_id' => $messageId,
+      ]);
+
+      // Save node
+      try {
+        $node->save();
+      }
+
+      catch (Exception $e) {
+        wrlc_alert_signup_log_error($e, $channel);
+        continue;
+      }
+
+      // Increase imported count for Watchdog
+      $imported = $imported + 1;
+    }
+    // Mark message read and archive
+    $modify = new Google\Service\Gmail\ModifyMessageRequest();
+    $modify->setRemoveLabelIds(["INBOX", "UNREAD"]);
+    try {
+      $content = $object['gmail']
+        ->users_messages
+        ->modify('me', $message['id'], $modify);
+    }
+    catch (Exception $e) {
+      wrlc_alert_signup_log_error($e, $channel);
+      continue;
+    }
+  }
+
+  // Log results to Watchdog
+  if ($imported > 0) {
+    \Drupal::logger($channel)->info('@type: imported @count new alerts.',
+      [
+        '@type' => $type,
+        '@count' => $imported,
+      ]
+    );
+  }
+  else {
+    \Drupal::logger($channel)->info('@type: no new alerts found.',
+    [
+      '@type' => $type,
+    ]);
+  }
+}
+
+// Reusable function to log Exceptions in watchdog
+function wrlc_alert_signup_log_error($e, $channel): void {
+  \Drupal::logger($channel)
+    ->error('<pre><code>' . $e . '</code></pre>');
+}

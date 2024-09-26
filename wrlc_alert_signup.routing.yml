@@ -1,0 +1,7 @@
+wrlc_alert_signup.settings:
+  path: '/admin/config/services/wrlc-alert'
+  defaults:
+    _title: 'Connect WRLC Alerts Google Group'
+    _form: 'Drupal\wrlc_alert_signup\Form\SettingsForm'
+  requirements:
+    _permission: 'administer site configuration'

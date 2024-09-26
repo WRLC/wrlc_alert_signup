@@ -1,0 +1,6 @@
+wrlc_alert_signup.settings:
+  title: WRLC Alerts
+  description: Connect WRLC Alerts Google Group
+  parent: system.admin_config_services
+  route_name: wrlc_alert_signup.settings
+  weight: 10
