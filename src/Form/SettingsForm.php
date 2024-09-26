@@ -1,7 +1,11 @@
 <?php
+/** @noinspection PhpUnused */
 
 namespace Drupal\wrlc_alert_signup\Form;
 
+use Drupal;
+use Drupal\Component\Plugin\Exception\InvalidPluginDefinitionException;
+use Drupal\Component\Plugin\Exception\PluginNotFoundException;
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
 
@@ -14,24 +18,27 @@ class SettingsForm extends ConfigFormBase {
   /**
    * {@inheritdoc}
    */
-  public function getFormId() {
+  public function getFormId(): string
+  {
     return 'wrlc_alert_signup_settings';
   }
 
   /**
    * {@inheritdoc}
    */
-  protected function getEditableConfigNames() {
+  protected function getEditableConfigNames(): array
+  {
     return ['wrlc_alert_signup.settings'];
   }
 
   /**
    * {@inheritdoc}
    */
-  public function buildForm(array $form, FormStateInterface $form_state) {
+  public function buildForm(array $form, FormStateInterface $form_state): array
+  {
 
     // Get array of node types for select options in node_type
-    $entityTypeManager = \Drupal::service('entity_type.manager');
+    $entityTypeManager = Drupal::service('entity_type.manager');
     $types = [];
     $contentTypes = $entityTypeManager->getStorage('node_type')->loadMultiple();
     foreach ($contentTypes as $contentType) {
@@ -40,7 +47,14 @@ class SettingsForm extends ConfigFormBase {
 
     // Get array of Google API Client entities
     $clients = [];
-    $google_api_clients = \Drupal::entityTypeManager()->getStorage('google_api_client')->loadMultiple();
+    try {
+      $google_api_clients = Drupal::entityTypeManager()->getStorage('google_api_client')->loadMultiple();
+    } catch (InvalidPluginDefinitionException|PluginNotFoundException $e) {
+      wrlc_alert_signup_log_error($e, 'wrlc_alert_signup');
+      return [
+        '#markup' => $this->t('Error loading Google API Clients')
+      ];
+    }
     foreach ($google_api_clients as $client) {
       $clients[$client->id()] = $client->label();
     }
@@ -83,7 +97,8 @@ class SettingsForm extends ConfigFormBase {
   /**
    * {@inheritdoc}
    */
-  public function submitForm(array &$form, FormStateInterface $form_state) {
+  public function submitForm(array &$form, FormStateInterface $form_state): void
+  {
     $this->config('wrlc_alert_signup.settings')
       ->set('gg_id', $form_state->getValue('gg_id'))
       ->save();
