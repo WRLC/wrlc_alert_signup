@@ -1,7 +1,6 @@
 <?php
 
 use Drupal\node\Entity\Node;
-use Drupal\Core\Entity\Query\QueryInterface;
 
 /**
  * @file
@@ -14,11 +13,12 @@ use Drupal\Core\Entity\Query\QueryInterface;
 
 /**
  * Implements hook_cron().
+ * @noinspection PhpUnused
  */
 function wrlc_alert_signup_cron(): void {
 
   // Get module config
-  $config = \Drupal::config('wrlc_alert_signup.settings');
+  $config = Drupal::config('wrlc_alert_signup.settings');
 
   // Module machine name and node type for use in Watchdog
   $channel = 'wrlc_alert_signup';
@@ -29,11 +29,11 @@ function wrlc_alert_signup_cron(): void {
   $imported = 0;
 
   // Get all existing message ids from wrlc_alerts nodes
-  $nids = \Drupal::entityQuery('node')
+  $nids = Drupal::entityQuery('node')
     ->accessCheck(FALSE)
     ->condition('type', 'wrlc_alerts')
     ->execute();
-  $nodes = \Drupal\node\Entity\Node::loadMultiple($nids);
+  $nodes = Node::loadMultiple($nids);
   $oldMessages = [];
   foreach ($nodes as $node) {
     $oldMessage = $node->get('field_message_id')->getValue();
@@ -45,7 +45,7 @@ function wrlc_alert_signup_cron(): void {
   // Load the Google account
   // (id should match id of api client in Drupal admin settings)
   try {
-    $google_api_client = \Drupal::entityTypeManager()
+    $google_api_client = Drupal::entityTypeManager()
       ->getStorage('google_api_client')
       ->load($client);
   } catch (Exception $e) {
@@ -54,7 +54,7 @@ function wrlc_alert_signup_cron(): void {
   }
 
   // Get the service.
-  $googleService = \Drupal::service('google_api_client.client');
+  $googleService = Drupal::service('google_api_client.client');
   // Apply the account to the service
   $googleService->setGoogleApiClient($google_api_client);
 
@@ -132,7 +132,7 @@ function wrlc_alert_signup_cron(): void {
         // Sender
         if ($header['name'] == 'X-Original-Sender') {
           $sender = $header['value'];
-          $ids = \Drupal::entityQuery('user')
+          $ids = Drupal::entityQuery('user')
             ->accessCheck(FALSE)
             ->condition('mail', $sender)
             ->execute();
@@ -187,9 +187,7 @@ function wrlc_alert_signup_cron(): void {
     $modify = new Google\Service\Gmail\ModifyMessageRequest();
     $modify->setRemoveLabelIds(["INBOX", "UNREAD"]);
     try {
-      $content = $object['gmail']
-        ->users_messages
-        ->modify('me', $message['id'], $modify);
+      $object['gmail']->users_messages->modify('me', $message['id'], $modify);
     }
     catch (Exception $e) {
       wrlc_alert_signup_log_error($e, $channel);
@@ -199,7 +197,7 @@ function wrlc_alert_signup_cron(): void {
 
   // Log results to Watchdog
   if ($imported > 0) {
-    \Drupal::logger($channel)->info('@type: imported @count new alerts.',
+    Drupal::logger($channel)->info('@type: imported @count new alerts.',
       [
         '@type' => $type,
         '@count' => $imported,
@@ -207,7 +205,7 @@ function wrlc_alert_signup_cron(): void {
     );
   }
   else {
-    \Drupal::logger($channel)->info('@type: no new alerts found.',
+    Drupal::logger($channel)->info('@type: no new alerts found.',
     [
       '@type' => $type,
     ]);
@@ -216,6 +214,6 @@ function wrlc_alert_signup_cron(): void {
 
 // Reusable function to log Exceptions in watchdog
 function wrlc_alert_signup_log_error($e, $channel): void {
-  \Drupal::logger($channel)
+  Drupal::logger($channel)
     ->error('<pre><code>' . $e . '</code></pre>');
 }

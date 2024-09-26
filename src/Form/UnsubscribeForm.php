@@ -2,8 +2,13 @@
 
 namespace Drupal\wrlc_alert_signup\Form;
 
+use Drupal;
+use Drupal\Component\Plugin\Exception\InvalidPluginDefinitionException;
+use Drupal\Component\Plugin\Exception\PluginNotFoundException;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\user\Entity\User;
+use Google_Service_Exception;
 
 /**
  * Provides a WRLC Alert Unsubscribe form.
@@ -13,17 +18,19 @@ class UnsubscribeForm extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public function getFormId() {
+  public function getFormId(): string
+  {
     return 'wrlc_alert_signup_unsubscribe';
   }
 
   /**
    * {@inheritdoc}
    */
-  public function buildForm(array $form, FormStateInterface $form_state) {
+  public function buildForm(array $form, FormStateInterface $form_state): array
+  {
 
     // Get the current user's email address
-    $account = \Drupal\user\Entity\User::load(\Drupal::currentUser()->id());
+    $account = User::load(Drupal::currentUser()->id());
     $email = $account->getEmail();
 
     $form['actions'] = [
@@ -53,19 +60,26 @@ class UnsubscribeForm extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public function submitForm(array &$form, FormStateInterface $form_state) {
+  public function submitForm(array &$form, FormStateInterface $form_state): void
+  {
     // Get the current user's email address
-    $account = \Drupal\user\Entity\User::load(\Drupal::currentUser()->id());
+    $account = User::load(Drupal::currentUser()->id());
     $email = $account->getEmail();
 
     // Load the Google account
     // (id should match id of api client in Drupal admin settings)
-    $config = \Drupal::config('wrlc_alert_signup.settings');
+    $config = Drupal::config('wrlc_alert_signup.settings');
     $client = $config->get('google_api_client');
-    $google_api_client = \Drupal::entityTypeManager()->getStorage('google_api_client')->load($client);
+    try {
+      $google_api_client = Drupal::entityTypeManager()->getStorage('google_api_client')->load($client);
+    } catch (InvalidPluginDefinitionException|PluginNotFoundException $e) {
+      wrlc_alert_signup_log_error($e, 'wrlc_alert_signup');
+      $this->messenger()->addError('Error unsubscribing from WRLC Alerts');
+      exit();
+    }
 
     // Get the service.
-    $googleService = \Drupal::service('google_api_client.client');
+    $googleService = Drupal::service('google_api_client.client');
     // Apply the account to the service
     $googleService->setGoogleApiClient($google_api_client);
 
@@ -73,10 +87,12 @@ class UnsubscribeForm extends FormBase {
     try {
       // Fetch service objects.
       $object = $googleService->getServiceObjects();
-      $config = \Drupal::config('wrlc_alert_signup.settings');
-      $unsubscribe = $object['directory']->members->delete($config->get('gg_id'), $email);
+      $config = Drupal::config('wrlc_alert_signup.settings');
+      $object['directory']->members->delete($config->get('gg_id'), $email);
     }
-    catch (\Google_Service_Exception $e) {
+    catch (Google_Service_Exception $e) {
+      wrlc_alert_signup_log_error($e, 'wrlc_alert_signup');
+      $this->messenger()->addError('Error unsubscribing from WRLC Alerts');
       exit();
     }
 
